@@ -7,7 +7,7 @@
 ifeq ($(OS),)
 OS = $(shell uname -s)
 endif
-PREFIX = /usr/local
+PREFIX = /usr
 CC   = gcc
 CPP  = g++
 AR   = ar
