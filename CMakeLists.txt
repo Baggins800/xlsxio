@@ -1,9 +1,24 @@
 CMAKE_MINIMUM_REQUIRED(VERSION 2.6)
-PROJECT(xlsxio)
+
+PROJECT(xlsxio DESCRIPTION "C libraries for reading and writing .xlsx files")
+
+# get version number
+FILE(READ "include/xlsxio_version.h" VERFILE)
+STRING(REGEX MATCH "#define XLSXIO_VERSION_MAJOR ([0-9]*)" DUMMYVAR ${VERFILE})
+SET(XLSXIO_VER_MAJOR ${CMAKE_MATCH_1})
+STRING(REGEX MATCH "#define XLSXIO_VERSION_MINOR ([0-9]*)" DUMMYVAR ${VERFILE})
+SET(XLSXIO_VER_MINOR ${CMAKE_MATCH_1})
+STRING(REGEX MATCH "#define XLSXIO_VERSION_MICRO ([0-9]*)" DUMMYVAR ${VERFILE})
+SET(XLSXIO_VER_MICRO ${CMAKE_MATCH_1})
+SET(XLSXIO_VER "${XLSXIO_VER_MAJOR}.${XLSXIO_VER_MINOR}.${XLSXIO_VER_MICRO}")
+UNSET(DUMMYVAR)
+UNSET(VERFILE)
+MESSAGE(STATUS "XLSX I/O library version: ${XLSXIO_VER}")
 
 # parameters
 OPTION(BUILD_STATIC "Build static libraries" ON)
 OPTION(BUILD_SHARED "Build shared libraries" ON)
+OPTION(BUILD_PC_FILES "Build pkg-config .pc" ON)
 OPTION(BUILD_TOOLS "Build tools" ON)
 OPTION(BUILD_EXAMPLES "Build examples" ON)
 OPTION(WITH_LIBZIP "Use libzip instead of Minizip" OFF)
@@ -16,7 +31,7 @@ ELSE()
 ENDIF()
 SET(EXPAT_DIR "" CACHE PATH "Path to the Expat library")
 
-# conditions
+# check conditions
 IF(NOT BUILD_STATIC AND NOT BUILD_SHARED)
   MESSAGE(FATAL_ERROR "Cannot build with both BUILD_STATIC and BUILD_SHARED disabled")
 ENDIF()
@@ -85,8 +100,7 @@ ENDIF()
 
 FOREACH(LINKTYPE ${LINKTYPES})
   ADD_LIBRARY(xlsxio_read_${LINKTYPE} ${LINKTYPE} lib/xlsxio_read.c lib/xlsxio_read_sharedstrings.c)
-  SET_TARGET_PROPERTIES(xlsxio_read_${LINKTYPE} PROPERTIES DEFINE_SYMBOL "BUILD_XLSXIO_DLL")
-  SET_TARGET_PROPERTIES(xlsxio_read_${LINKTYPE} PROPERTIES COMPILE_DEFINITIONS "BUILD_XLSXIO;${ANYZIP_DEF}")
+  SET_TARGET_PROPERTIES(xlsxio_read_${LINKTYPE} PROPERTIES COMPILE_DEFINITIONS "BUILD_XLSXIO;${ANYZIP_DEF};BUILD_XLSXIO_${LINKTYPE}")
   SET_TARGET_PROPERTIES(xlsxio_read_${LINKTYPE} PROPERTIES OUTPUT_NAME xlsxio_read)
   IF(MINGW AND LINKTYPE STREQUAL "SHARED")
     SET_TARGET_PROPERTIES(xlsxio_read_${LINKTYPE} PROPERTIES LINK_FLAGS "-Wl,--output-def=libxlsxio_read.def")
@@ -97,8 +111,7 @@ FOREACH(LINKTYPE ${LINKTYPES})
   SET(ALLTARGETS ${ALLTARGETS} xlsxio_read_${LINKTYPE})
 
   ADD_LIBRARY(xlsxio_write_${LINKTYPE} ${LINKTYPE} lib/xlsxio_write.c)
-  SET_TARGET_PROPERTIES(xlsxio_write_${LINKTYPE} PROPERTIES DEFINE_SYMBOL "BUILD_XLSXIO_DLL")
-  SET_TARGET_PROPERTIES(xlsxio_write_${LINKTYPE} PROPERTIES COMPILE_DEFINITIONS "BUILD_XLSXIO;${ANYZIP_DEF}")
+  SET_TARGET_PROPERTIES(xlsxio_write_${LINKTYPE} PROPERTIES COMPILE_DEFINITIONS "BUILD_XLSXIO;${ANYZIP_DEF};BUILD_XLSXIO_${LINKTYPE}")
   SET_TARGET_PROPERTIES(xlsxio_write_${LINKTYPE} PROPERTIES OUTPUT_NAME xlsxio_write)
   IF(MINGW AND LINKTYPE STREQUAL "SHARED")
     SET_TARGET_PROPERTIES(xlsxio_write_${LINKTYPE} PROPERTIES LINK_FLAGS "-Wl,--output-def=libxlsxio_write.def")
@@ -131,6 +144,8 @@ FOREACH(LINKTYPE ${LINKTYPES})
 
   SET(EXELINKTYPE ${LINKTYPE})
 ENDFOREACH()
+#SET_TARGET_PROPERTIES(xlsxio_read_SHARED PROPERTIES DEFINE_SYMBOL "BUILD_XLSXIO_DLL")
+#SET_TARGET_PROPERTIES(xlsxio_write_SHARED PROPERTIES DEFINE_SYMBOL "BUILD_XLSXIO_DLL")
 
 IF(BUILD_TOOLS)
   ADD_EXECUTABLE(xlsxio_xlsx2csv src/xlsxio_xlsx2csv.c)
@@ -181,9 +196,9 @@ IF(BUILD_DOCUMENTATION)
   INSTALL(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/doc/man
     DESTINATION .
   )
-  #INSTALL(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/doc/html
-  #  DESTINATION share/doc
-  #)
+  INSTALL(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/doc/html
+    DESTINATION share/xlsxio
+  )
 ENDIF()
 
 # installation specifications
@@ -203,4 +218,26 @@ IF(MINGW AND BUILD_SHARED)
     INSTALL(FILES "${CMAKE_CURRENT_BINARY_DIR}/libxlsxio_readw.def" DESTINATION lib)
     #INSTALL(FILES "${CMAKE_CURRENT_BINARY_DIR}/libxlsxio_writew.def" DESTINATION lib)
   ENDIF()
+ENDIF()
+
+# generate .cmake and .pc files
+MACRO(generate_and_install_config_files _NAME _DESC _LIBS _HEADER)
+  SET(XLSXIO_NAME "${_NAME}")
+  SET(XLSXIO_DESC "${_DESC}")
+  SET(XLSXIO_HEADER "${_HEADER}")
+  STRING(REGEX REPLACE "^lib\([^ ]*\)" "\\1" XLSXIO_LIB "${XLSXIO_NAME}")
+  STRING(REPLACE ";" " " XLSXIO_LDFLAGS "-l${XLSXIO_LIB} ${_LIBS}")
+  STRING(REGEX REPLACE "\([^ ]*\)[/\\]lib([^ /\\.]*).[^ ]*" "-L\\1 -l\\2" XLSXIO_LDFLAGS "${XLSXIO_LDFLAGS}")
+  CONFIGURE_FILE(templateConfig.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/${XLSXIO_NAME}Config.cmake" @ONLY)
+  CONFIGURE_FILE(templateConfigVersion.cmake.in "${CMAKE_CURRENT_BINARY_DIR}/${XLSXIO_NAME}ConfigVersion.cmake" @ONLY)
+  INSTALL(FILES "${CMAKE_CURRENT_BINARY_DIR}/${XLSXIO_NAME}Config.cmake" "${CMAKE_CURRENT_BINARY_DIR}/${XLSXIO_NAME}ConfigVersion.cmake" DESTINATION cmake/)
+  IF (BUILD_PC_FILES)
+    CONFIGURE_FILE(template.pc.in "${CMAKE_CURRENT_BINARY_DIR}/${XLSXIO_NAME}.pc" @ONLY)
+    INSTALL(FILES "${CMAKE_CURRENT_BINARY_DIR}/${XLSXIO_NAME}.pc" DESTINATION lib/pkgconfig)
+  ENDIF()
+ENDMACRO()
+generate_and_install_config_files("libxlsxio_write" "C library for writing .xlsx files" "${ANYZIP_LIBRARIES} ${THREADLIB}" "xlsxio_write.h")
+generate_and_install_config_files("libxlsxio_read" "C library for writing .xlsx files" "${ANYZIP_LIBRARIES} ${EXPAT_LIBRARIES}" "xlsxio_read.h")
+IF(WITH_WIDE)
+  generate_and_install_config_files("libxlsxio_readw" "C library for reading .xlsx files using wide characters" "${ANYZIP_LIBRARIES} ${EXPAT_LIBRARIES}" "xlsxio_read.h")
 ENDIF()

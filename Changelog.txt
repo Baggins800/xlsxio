@@ -1,3 +1,92 @@
+0.2.30
+
+2021-03-12  Brecht Sanders  https://github.com/brechtsanders/
+
+  * remove <AppVersion> tag from xlsxio_write.c and put version information in <Application> (issue #91)
+
+2021-03-11  Brecht Sanders  https://github.com/brechtsanders/
+
+  * fix CMakeLists.txt to generate and install pkg-config .pc files
+
+2020-12-29  Viest  https://github.com/viest
+
+  * added XLSXIOREAD_SKIP_HIDDEN_ROWS to xlsxio_read.h, skipping hidden rows is no longer the default setting
+  
+2020-12-29  akuhtr  https://github.com/akuhtr
+
+  * fixed example in README.md to use xlsxioread_free() instead of free()
+  
+2020-07-12  Remi Collet  https://github.com/remicollet
+
+  * added XLSXIO_VERSION_ID to xlsxio_version.h
+  
+0.2.29
+
+2020-07-10  Brecht Sanders  https://github.com/brechtsanders/
+
+  * only treat sheet as a table (with header rows) when XLSXIOREAD_SKIP_EXTRA_CELLS flag is used (issue #75)
+  * added xlsxioread_free() to fix crashes when calling library build with different compiler (issue #73)
+
+0.2.28
+
+2020-07-06  Brecht Sanders  https://github.com/brechtsanders/
+
+  * fixed issues with XLSXIOREAD_SKIP_EMPTY_CELLS/XLSXIOREAD_SKIP_EMPTY_ROWS/XLSXIOREAD_SKIP_ALL_EMPTY/XLSXIOREAD_SKIP_EXTRA_CELLS (issue #75)
+
+0.2.27
+
+2020-07-05  Brecht Sanders  https://github.com/brechtsanders/
+
+  * fixed issues with XLSXIOREAD_SKIP_EMPTY_CELLS/XLSXIOREAD_SKIP_EMPTY_ROWS/XLSXIOREAD_SKIP_ALL_EMPTY (issue #74)
+
+2020-05-08  Brecht Sanders  https://github.com/brechtsanders/
+
+  * changed Makefile to also generate .def files to be included in Windows packages
+
+2020-03-20  Brecht Sanders  https://github.com/brechtsanders/
+
+  * accepted patch (#63) to add xlsxioread_sheet_last_column_index() and xlsxioread_sheet_flags()
+  * when Doxygen is available HTML documentation is installed in {PREFIX}/share/xlsxio/html
+
+0.2.26
+
+2020-03-20  Brecht Sanders  https://github.com/brechtsanders/
+
+  * accepted patch (#63) to add xlsxioread_sheet_last_column_index() and xlsxioread_sheet_flags()
+  * added xlsxioread_sheet_last_row_index()
+
+0.2.25
+
+2020-03-20  Brecht Sanders  https://github.com/brechtsanders/
+
+  * fixed memory leaks in xlsxioread_sheet_next_cell_int/xlsxioread_sheet_next_cell_float/xlsxioread_sheet_next_cell_datetime (issue #54)
+  * added xml:space="preserve" to text cells to preserve spacing (issue #57)
+  * ran valgrind tests on xlsxio_xlsx2csv and xlsxio_csv2xlsx
+  * fixed memory leak in write_cell_data() in xlsxio_write.c (result of get_A1col was not freed)
+  * rewrote get_A1col() in in xlsxio_write.c to avoid issues on platforms where multiple calls to va_start()/va_end() don't work
+
+0.2.24
+
+2020-03-19  Brecht Sanders  https://github.com/brechtsanders/
+
+  * fixed memory leak (missing free(data->basepath) in main_sheet_get_sheetfile_callback when sheet filename not found)
+  * added support for .xlsm, .xltx and .xltm files (thanks to coproc for suggesting this in issue #61)
+
+0.2.23
+
+2020-03-09  Brecht Sanders  https://github.com/brechtsanders/
+
+  * fixed missing #include <stdio.h> in xlsxio_read.c, needed for sscanf()
+  * fixed clang warning "format string is not a string literal" in xlsxio_write.c
+
+0.2.22
+
+2020-03-09  Brecht Sanders  https://github.com/brechtsanders/
+
+  * fixed CMakeLists.txt issue where BUILD_XLSXIO_DLL was also defined for static libraries
+  * added .travis.yml to allow building with Travis CI (on Linux)
+  * changes to xlsxio_write.c to support minizip2
+
 0.2.21
 
 2018-12-14  Brecht Sanders  https://github.com/brechtsanders/

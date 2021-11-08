@@ -12,46 +12,49 @@
 #include <stdarg.h>
 
 #ifdef USE_MINIZIP
-#include <minizip/zip.h>
-#define ZIPFILETYPE zipFile
+#  include <minizip/zip.h>
+#  if !defined(Z_DEFLATED) && defined(MZ_COMPRESS_METHOD_DEFLATE) /* support minizip2 which defines MZ_COMPRESS_METHOD_DEFLATE instead of Z_DEFLATED */
+#    define Z_DEFLATED MZ_COMPRESS_METHOD_DEFLATE
+#  endif
+#  define ZIPFILETYPE zipFile
 #else
-#if (defined(STATIC) || defined(BUILD_XLSXIO_STATIC) || defined(BUILD_XLSXIO_STATIC_DLL) || (defined(BUILD_XLSXIO) && !defined(BUILD_XLSXIO_DLL) && !defined(BUILD_XLSXIO_SHARED))) && !defined(ZIP_STATIC)
-#define ZIP_STATIC
-#endif
-#include <zip.h>
-#ifndef ZIP_RDONLY
+#  if (defined(STATIC) || defined(BUILD_XLSXIO_STATIC) || defined(BUILD_XLSXIO_STATIC_DLL) || (defined(BUILD_XLSXIO) && !defined(BUILD_XLSXIO_DLL) && !defined(BUILD_XLSXIO_SHARED))) && !defined(ZIP_STATIC)
+#    define ZIP_STATIC
+#  endif
+#  include <zip.h>
+#  ifndef ZIP_RDONLY
 typedef struct zip zip_t;
 typedef struct zip_source zip_source_t;
-#endif
-#define ZIPFILETYPE zip_t
-#ifndef USE_LIBZIP
-#define USE_LIBZIP
-#endif
+#  endif
+#  define ZIPFILETYPE zip_t
+#  ifndef USE_LIBZIP
+#    define USE_LIBZIP
+#  endif
 #endif
 
 #if defined(_WIN32) && !defined(USE_PTHREADS)
-#define USE_WINTHREADS
-#include <windows.h>
+#  define USE_WINTHREADS
+#  include <windows.h>
 #else
-#define USE_PTHREADS
-#include <pthread.h>
+#  define USE_PTHREADS
+#  include <pthread.h>
 #endif
 
 #if defined(_MSC_VER)
-#undef DLL_EXPORT_XLSXIO
-#define DLL_EXPORT_XLSXIO
-#define va_copy(dst,src) ((dst) = (src))
+#  undef DLL_EXPORT_XLSXIO
+#  define DLL_EXPORT_XLSXIO
+#  define va_copy(dst,src) ((dst) = (src))
 #endif
 
 #ifdef _WIN32
-#define pipe(fds) _pipe(fds, 4096, _O_BINARY)
-#define read _read
-#define write _write
-#define write _write
-#define close _close
-#define fdopen _fdopen
+#  define pipe(fds) _pipe(fds, 4096, _O_BINARY)
+#  define read _read
+#  define write _write
+#  define write _write
+#  define close _close
+#  define fdopen _fdopen
 #else
-#define _fdopen(f) f
+#  define _fdopen(f) f
 #endif
 
 //#undef WITHOUT_XLSX_STYLES
@@ -149,8 +152,7 @@ const char* docprops_core_xml =
 const char* docprops_app_xml =
   XML_HEADER
   "<Properties xmlns=\"http://schemas.openxmlformats.org/officeDocument/2006/extended-properties\" xmlns:vt=\"http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes\">" OPTIONAL_LINE_BREAK
-  "<Application>" XLSXIOWRITE_NAME "</Application>" OPTIONAL_LINE_BREAK
-  "<AppVersion>" XLSXIO_VERSION_STRING "</AppVersion>" OPTIONAL_LINE_BREAK
+  "<Application>" XLSXIOWRITE_NAME " " XLSXIO_VERSION_STRING "</Application>" OPTIONAL_LINE_BREAK 
   "</Properties>" OPTIONAL_LINE_BREAK;
 
 const char* rels_xml =
@@ -486,6 +488,7 @@ int append_data (char** pdata, size_t* pdatalen, const char* format, ...)
 }
 
 #ifndef NO_COLUMN_NUMBERS
+/*
 //insert formatted data into a null-terminated buffer at the specified position and update the length counter
 int insert_data (char** pdata, size_t* pdatalen, size_t pos, const char* format, ...)
 {
@@ -505,7 +508,7 @@ int insert_data (char** pdata, size_t* pdatalen, size_t pos, const char* format,
   else
     (*pdata)[pos + len] = 0;
   va_start(args, format);
-  vsnprintf(*pdata + pos, len, format, args);
+  len = vsnprintf(*pdata + pos, len, format, args);
   va_end(args);
   *pdatalen += len;
   return len;
@@ -518,13 +521,40 @@ char* get_A1col (uint64_t col)
   if (col > 0) {
     do {
       col--;
-      insert_data(&result, &resultlen, 0, "%c", 'A' + col % 26);
+      insert_data(&result, &resultlen, 0, "%c", 'A' + (col % 26));
+      col = col / 26;
+    } while (col > 0);
+  }
+  return result;
+}
+*/
+
+char* get_A1col (uint64_t col)
+{
+  char* result = NULL;
+  size_t resultlen = 0;
+  //allocate 19 bytes as the maximum value for 64-bit devided by 26 has 18 digits
+  if (col > 0 && (result = (char*)malloc(19)) != NULL) {
+    result[0] = 0;
+    do {
+      col--;
+      memmove(result + 1, result, ++resultlen);
+      result[0] = 'A' + (col % 26);
       col = col / 26;
     } while (col > 0);
   }
   return result;
 }
 #endif
+
+#define need_space_preserve_attr(value) 1
+/*
+int need_space_preserve_attr (const char* value)
+{
+  /////TO DO: return non-zero only if space at beginning or end, or contains multiple consecutive spaces
+  return 1;
+}
+*/
 
 ////////////////////////////////////////////////////////////////////////
 
@@ -567,7 +597,6 @@ struct xlsxio_write_struct {
 #define ROWNRPARAM(handle) , handle->rownr
 #ifndef NO_COLUMN_NUMBERS
 #define COLNRTAG " r=\"%s%" PRIu64 "\""
-#define COLNRPARAM(handle) , get_A1col(handle->colnr), handle->rownr
 #endif
 #endif
 
@@ -849,6 +878,9 @@ void write_cell_data (xlsxiowriter handle, const char* rowattr, const char* pref
   //determine cell coordinate
 #if !defined(NO_ROW_NUMBERS) && !defined(NO_COLUMN_NUMBERS)
   cellcoord = get_A1col(++handle->colnr);
+#define COLNRPARAM(handle) , cellcoord, handle->rownr
+#else
+#define COLNRPARAM(handle)
 #endif
   //add cell data
   if (handle->sheetopen) {
@@ -858,7 +890,7 @@ void write_cell_data (xlsxiowriter handle, const char* rowattr, const char* pref
     if (data)
       fprintf(handle->pipe_write, "%s", data);
     if (suffix)
-      fprintf(handle->pipe_write, suffix);
+      fprintf(handle->pipe_write, "%s", suffix);
   } else {
     //add cell data to buffer
     if (prefix)
@@ -968,10 +1000,14 @@ DLL_EXPORT_XLSXIO void xlsxiowrite_set_row_height (xlsxiowriter handle, size_t h
 DLL_EXPORT_XLSXIO void xlsxiowrite_add_column (xlsxiowriter handle, const char* value, int width)
 {
   struct column_info_struct** pcolinfo = handle->pcurrentcolumn;
-  if (value)
-    write_cell_data(handle, STYLE_ATTR(STYLE_HEADER), "<c t=\"inlineStr\"" STYLE_ATTR(STYLE_HEADER) COLNRTAG "><is><t>", "</t></is></c>", "%s", value);
-  else
+  if (value) {
+    if (need_space_preserve_attr(value))
+      write_cell_data(handle, STYLE_ATTR(STYLE_HEADER), "<c t=\"inlineStr\"" STYLE_ATTR(STYLE_HEADER) COLNRTAG "><is xml:space=\"preserve\"><t>", "</t></is></c>", "%s", value);
+    else
+      write_cell_data(handle, STYLE_ATTR(STYLE_HEADER), "<c t=\"inlineStr\"" STYLE_ATTR(STYLE_HEADER) COLNRTAG "><is><t>", "</t></is></c>", "%s", value);
+  } else {
     write_cell_data(handle, STYLE_ATTR(STYLE_HEADER), "<c" STYLE_ATTR(STYLE_HEADER) COLNRTAG "/>", NULL, NULL);
+  }
   if (*pcolinfo)
     (*pcolinfo)->width = width;
   if (handle->freezetop == 0)
@@ -980,10 +1016,14 @@ DLL_EXPORT_XLSXIO void xlsxiowrite_add_column (xlsxiowriter handle, const char* 
 
 DLL_EXPORT_XLSXIO void xlsxiowrite_add_cell_string (xlsxiowriter handle, const char* value)
 {
-  if (value)
-    write_cell_data(handle, NULL, "<c t=\"inlineStr\"" STYLE_ATTR(STYLE_TEXT) COLNRTAG "><is><t>", "</t></is></c>", "%s", value);
-  else
+  if (value) {
+    if (need_space_preserve_attr(value))
+      write_cell_data(handle, NULL, "<c t=\"inlineStr\"" STYLE_ATTR(STYLE_TEXT) COLNRTAG "><is xml:space=\"preserve\"><t>", "</t></is></c>", "%s", value);
+    else
+      write_cell_data(handle, NULL, "<c t=\"inlineStr\"" STYLE_ATTR(STYLE_TEXT) COLNRTAG "><is><t>", "</t></is></c>", "%s", value);
+  } else {
     write_cell_data(handle, NULL, "<c" STYLE_ATTR(STYLE_TEXT) COLNRTAG "/>", NULL, NULL);
+  }
 }
 
 DLL_EXPORT_XLSXIO void xlsxiowrite_add_cell_int (xlsxiowriter handle, int64_t value)
